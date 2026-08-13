@@ -62,7 +62,7 @@ class CreditmemoPushCommand extends Command
      * @param OutputInterface $out
      * @return bool
      */
-    public function execute(InputInterface $inp, OutputInterface $out)
+    public function execute(InputInterface $inp, OutputInterface $out): int
     {
         $this->state->setAreaCode(Area::AREA_ADMINHTML);
 
@@ -72,14 +72,14 @@ class CreditmemoPushCommand extends Command
         if (!$creditmemo->getEntityId()) {
             $out->writeln('<error>No creditmemo found with ID ' . $creditmemoId . ' </error>');
 
-            return false;
+            return Command::FAILURE;
         }
 
         $this->dataHelper->setStoreId($creditmemo->getStoreId());
         if (!$this->dataHelper->getIsEnabled()) {
             $out->writeln('<error>Adwise_Analytics not enabled in configuration. Aborting.</error>');
 
-            return false;
+            return Command::FAILURE;
         }
 
         try {
@@ -90,6 +90,10 @@ class CreditmemoPushCommand extends Command
             $out->writeln('<info>Creditmemo (ID: ' . $creditmemoId . ') succesfully pushed to Google Analytics</info>');
         } catch (\Exception $e) {
             $out->writeln('<error>Creditmemo (ID: ' . $creditmemoId . ') not sent. Error: ' . $e . '</error>');
+
+            return Command::FAILURE;
         }
+
+        return Command::SUCCESS;
     }
 }

@@ -15,5 +15,9 @@
 ## 2.0.0-RC2
 - AnalyticsService method handleProcessingOrder is now defined as public.
 
+## 2.0.2
+- Add Symfony 7-compatible console command return types.
+- Return Symfony Console success and failure exit codes from console commands.
+
 ## 2.0.1
 - Version bump

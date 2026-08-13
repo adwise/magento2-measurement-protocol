@@ -64,7 +64,7 @@ class OrderPushCommand extends Command
      * @param OutputInterface $out
      * @return bool
      */
-    public function execute(InputInterface $inp, OutputInterface $out)
+    public function execute(InputInterface $inp, OutputInterface $out): int
     {
         $this->state->setAreaCode(Area::AREA_ADMINHTML);
 
@@ -74,20 +74,24 @@ class OrderPushCommand extends Command
         if (!$order) {
             $out->writeln('<error>No order found with increment ID ' . $incrementId . ' </error>');
 
-            return false;
+            return Command::FAILURE;
         }
 
         $this->dataHelper->setStoreId($order->getStoreId());
         if (!$this->dataHelper->getIsEnabled()) {
             $out->writeln('<error>Adwise_Analytics not enabled in configuration. Aborting.</error>');
 
-            return false;
+            return Command::FAILURE;
         }
 
         try {
             $this->analyticsService->handleOrder($order);
         } catch (\Exception $e) {
             $out->writeln('<error>Data not sent. Error: ' . $e . '</error>');
+
+            return Command::FAILURE;
         }
+
+        return Command::SUCCESS;
     }
 }
