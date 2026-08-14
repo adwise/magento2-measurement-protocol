@@ -58,7 +58,7 @@ class GetPayloadCommand extends Command
      * @param OutputInterface $out
      * @return bool
      */
-    public function execute(InputInterface $inp, OutputInterface $out)
+    public function execute(InputInterface $inp, OutputInterface $out): int
     {
         $this->state->setAreaCode(Area::AREA_ADMINHTML);
 
@@ -73,6 +73,8 @@ class GetPayloadCommand extends Command
         }
 
         $out->writeln(json_encode($data, JSON_PRETTY_PRINT));
+
+        return Command::SUCCESS;
     }
 }
 
