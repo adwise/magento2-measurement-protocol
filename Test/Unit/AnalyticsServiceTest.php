@@ -72,6 +72,9 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
     private function enableSettings($enableModule, $enableOrderHit, $enableCreditMemoHit){
         $this->datahelperMock->expects($this->any())->method('getIsEnabled')->willReturn($enableModule);
         $this->datahelperMock->expects($this->any())->method('getMPEnabled')->willReturn($enableModule);
+        $this->datahelperMock->expects($this->any())->method('getAnyEnabled')->willReturn($enableModule);
+        $this->datahelperMock->expects($this->any())->method('getAnyPurchaseEventEnabled')->willReturn($enableOrderHit);
+        $this->datahelperMock->expects($this->any())->method('getAnyRefundEventEnabled')->willReturn($enableCreditMemoHit);
         $this->datahelperMock->expects($this->any())->method('getMPPurchaseEventEnabled')->willReturn($enableOrderHit);
         $this->datahelperMock->expects($this->any())->method('getMPRefundEventEnabled')->willReturn($enableCreditMemoHit);
     }
@@ -104,6 +107,25 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
 
         $this->analyticsCallerMock->expects($this->once())->method('handleOrder')->with($order);
         $this->assertEquals(AnalyticsService::SUCCESS, $this->analyticsService->handleOrder($order));
+    }
+
+    /**
+     * A failing Google Analytics call must not break the order save and must leave the order exportable
+     */
+    public function testProcessingOrderAnalyticsFailureIsContained(): void
+    {
+        $this->enableSettings(true,true,true);
+        $order = $this->getMockedOrderWithState(MagentoOrder::STATE_PROCESSING);
+
+        $order->expects($this->atLeastOnce())->method('getAwAnalyticsExport')->willReturn(null);
+        $order->expects($this->never())->method('setAwAnalyticsExport');
+        $order->expects($this->never())->method('setAwAnalyticsAmount');
+        $order->expects($this->never())->method('save');
+
+        $this->analyticsCallerMock->expects($this->once())->method('handleOrder')
+            ->willThrowException(new \Exception('Operation timed out'));
+
+        $this->assertEquals(AnalyticsService::ERROR_EXPORT_FAILED, $this->analyticsService->handleOrder($order));
     }
 
     /**
