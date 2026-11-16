@@ -59,6 +59,7 @@ class AnalyticsService
     const ERROR_CREDITMEMO_NOT_ALLOWED = -5;
     const ERROR_CREDITMEMO_NEGATIVE_BALANCE = -6;
     const ERROR_DISABLED = -7;
+    const ERROR_EXPORT_FAILED = -1337;
 
     const SUCCESS = 0;
 
@@ -114,7 +115,15 @@ class AnalyticsService
         }
 
         // ensure this is not a undo action
-        $this->analyticsCaller->handleOrder($order);
+        try {
+            $this->analyticsCaller->handleOrder($order);
+        } catch (\Exception $exception) {
+            $this->logger->error('[AnalyticsService] Failure exporting order', [
+                'order_increment_id' => $order->getIncrementId(),
+                'exception' => $exception,
+            ]);
+            return self::ERROR_EXPORT_FAILED;
+        }
 
         $amountExported = $order->getGrandTotal();
         $order->setAwAnalyticsExport(self::EXPORT_STATUS_PROCESSED);
