@@ -15,6 +15,10 @@
 ## 2.0.0-RC2
 - AnalyticsService method handleProcessingOrder is now defined as public.
 
+## 2.0.3
+- Catch and log Google Analytics export exceptions for processing orders instead of interrupting order saves (#12).
+- Leave failed orders unexported so exports can be retried on a later save while the order is still processing.
+
 ## 2.0.2
 - Add Symfony 7-compatible console command return types.
 - Return Symfony Console success and failure exit codes from console commands.
