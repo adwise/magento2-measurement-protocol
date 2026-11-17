@@ -26,7 +26,7 @@ class OrderCIDProvider implements OrderDataProviderInterface
         CIDProvider $productHelper
     ) {
         $this->dataHelper = $dataHelper;
-        $this->productHelper = $productHelper;
+        $this->CIDProvider = $productHelper;
     }
 
     function getData(OrderInterface $order)

@@ -46,6 +46,7 @@ class Order
         ProductRepositoryInterface $productRepository
     ) {
         $this->dataHelper = $dataHelper;
+        $this->productHelper = $productHelper;
         $this->orderRepository = $orderRepository;
         $this->orderCollectionFactory = $orderCollectionFactory;
         $this->productRepository = $productRepository;
