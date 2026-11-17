@@ -1,15 +1,18 @@
 <?php
 
+namespace Adwise\Analytics\Test\Unit;
+
 use Adwise\Analytics\Service\AnalyticsCaller;
-use Adwise\Analytics\Helper\Order as OrderHelper;
-use Adwise\Analytics\Helper\Creditmemo as CreditmemoHelper;
 use Adwise\Analytics\Helper\Data as DataHelper;
 use Magento\Sales\Model\Order as MagentoOrder;
 use Adwise\Analytics\Service\AnalyticsService;
-use Magento\Framework\TestFramework\Unit\Helper\ObjectManager;
+use Magento\Sales\Api\OrderRepositoryInterface;
+use Psr\Log\LoggerInterface;
+use PHPUnit\Framework\TestCase;
 use Magento\Sales\Model\Order\Creditmemo;
 
-class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
+
+class AnalyticsServiceTest extends TestCase
 {
 
     /**
@@ -17,14 +20,8 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
      */
     protected $analyticsCallerMock;
 
-    /**
-     * @var OrderHelper|\PHPUnit\Framework\MockObject\MockObject
-     */
-    protected $orderHelperMock;
-    /**
-     * @var CreditmemoHelper|\PHPUnit\Framework\MockObject\MockObject
-     */
-    protected $creditmemoMock;
+    /** @var OrderRepositoryInterface|\PHPUnit\Framework\MockObject\MockObject */
+    protected $orderRepositoryMock;
 
     /**
      * @var DataHelper|\PHPUnit\Framework\MockObject\MockObject
@@ -42,24 +39,14 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
             ->disableOriginalConstructor()
             ->getMock();
 
-        $this->orderHelperMock = $this->getMockBuilder(OrderHelper::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-        $this->creditmemoMock = $this->getMockBuilder(CreditmemoHelper::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $this->orderRepositoryMock = $this->createMock(OrderRepositoryInterface::class);
+        $this->datahelperMock = $this->createStub(DataHelper::class);
 
-        $this->datahelperMock = $this->getMockBuilder(DataHelper::class)
-            ->disableOriginalConstructor()
-            ->getMock();
-
-
-        $this->analyticsService = (new ObjectManager($this))->getObject(
-            AnalyticsService::class,
-            [
-                'dataHelper' => $this->datahelperMock,
-                'analyticsCaller' => $this->analyticsCallerMock
-            ]
+        $this->analyticsService = new AnalyticsService(
+            $this->createStub(LoggerInterface::class),
+            $this->datahelperMock,
+            $this->analyticsCallerMock,
+            $this->orderRepositoryMock
         );
     }
 
@@ -70,13 +57,13 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
      * @param $enableCreditMemoHit
      */
     private function enableSettings($enableModule, $enableOrderHit, $enableCreditMemoHit){
-        $this->datahelperMock->expects($this->any())->method('getIsEnabled')->willReturn($enableModule);
-        $this->datahelperMock->expects($this->any())->method('getMPEnabled')->willReturn($enableModule);
-        $this->datahelperMock->expects($this->any())->method('getAnyEnabled')->willReturn($enableModule);
-        $this->datahelperMock->expects($this->any())->method('getAnyPurchaseEventEnabled')->willReturn($enableOrderHit);
-        $this->datahelperMock->expects($this->any())->method('getAnyRefundEventEnabled')->willReturn($enableCreditMemoHit);
-        $this->datahelperMock->expects($this->any())->method('getMPPurchaseEventEnabled')->willReturn($enableOrderHit);
-        $this->datahelperMock->expects($this->any())->method('getMPRefundEventEnabled')->willReturn($enableCreditMemoHit);
+        $this->datahelperMock->method('getIsEnabled')->willReturn($enableModule);
+        $this->datahelperMock->method('getMPEnabled')->willReturn($enableModule);
+        $this->datahelperMock->method('getAnyEnabled')->willReturn($enableModule);
+        $this->datahelperMock->method('getAnyPurchaseEventEnabled')->willReturn($enableOrderHit);
+        $this->datahelperMock->method('getAnyRefundEventEnabled')->willReturn($enableCreditMemoHit);
+        $this->datahelperMock->method('getMPPurchaseEventEnabled')->willReturn($enableOrderHit);
+        $this->datahelperMock->method('getMPRefundEventEnabled')->willReturn($enableCreditMemoHit);
     }
 
     /**
@@ -84,8 +71,10 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
      */
     public function testPendingOrderNotProcessed(): void
     {
+        $this->orderRepositoryMock->expects($this->never())->method('save');
         $this->enableSettings(true,true,true);
         $order = $this->getMockedOrderWithState(MagentoOrder::STATE_PENDING_PAYMENT);
+        $order->expects($this->never())->method('setAwAnalyticsExport');
 
         $this->analyticsCallerMock->expects($this->never())->method('handleOrder');
         $this->assertEquals(AnalyticsService::ERROR_UNKNOWN_ORDER_STATE, $this->analyticsService->handleOrder($order));
@@ -103,7 +92,7 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
         $order->expects($this->atLeastOnce())->method('getAwAnalyticsExport')->willReturn(null);
         $order->expects($this->once())->method('setAwAnalyticsExport')->with(AnalyticsService::EXPORT_STATUS_PROCESSED);
         $order->expects($this->once())->method('addCommentToStatusHistory');
-        $order->expects($this->once())->method('save');
+        $this->orderRepositoryMock->expects($this->once())->method('save')->with($order);
 
         $this->analyticsCallerMock->expects($this->once())->method('handleOrder')->with($order);
         $this->assertEquals(AnalyticsService::SUCCESS, $this->analyticsService->handleOrder($order));
@@ -120,7 +109,7 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
         $order->expects($this->atLeastOnce())->method('getAwAnalyticsExport')->willReturn(null);
         $order->expects($this->never())->method('setAwAnalyticsExport');
         $order->expects($this->never())->method('setAwAnalyticsAmount');
-        $order->expects($this->never())->method('save');
+        $this->orderRepositoryMock->expects($this->never())->method('save');
 
         $this->analyticsCallerMock->expects($this->once())->method('handleOrder')
             ->willThrowException(new \Exception('Operation timed out'));
@@ -132,6 +121,7 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
      * Test if other states are never exported
      */
     public function testInvalidProcessingStates(){
+        $this->orderRepositoryMock->expects($this->never())->method('save');
         $invalidStates = [
             AnalyticsService::EXPORT_STATUS_OLD_EXPORTED_POSITIVE,
             AnalyticsService::EXPORT_STATUS_OLD_EXPORTED_NEGATIVE,
@@ -171,8 +161,8 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
         // So we expect 0 to be saved
         $order->expects($this->once())->method('setAwAnalyticsAmount')->with(0);
         $order->expects($this->once())->method('setAwAnalyticsExport')->with(AnalyticsService::EXPORT_STATUS_FULLY_REFUNDED);
-        $order->expects($this->once())->method('save');
-        $creditMemo->expects($this->any())->method('getOrder')->willReturn($order);
+        $this->orderRepositoryMock->expects($this->once())->method('save')->with($order);
+        $creditMemo->method('getOrder')->willReturn($order);
 
         $this->assertEquals(AnalyticsService::SUCCESS, $this->analyticsService->handleCreditmemo($creditMemo));
     }
@@ -196,8 +186,8 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
         $creditMemo->expects($this->atLeastOnce())->method('getGrandTotal')->willReturn(50);
         // So we expect 50 to be saved
         $order->expects($this->once())->method('setAwAnalyticsAmount')->with(50);
-        $order->expects($this->once())->method('save');
-        $creditMemo->expects($this->any())->method('getOrder')->willReturn($order);
+        $this->orderRepositoryMock->expects($this->once())->method('save')->with($order);
+        $creditMemo->method('getOrder')->willReturn($order);
 
         $this->assertEquals(AnalyticsService::SUCCESS, $this->analyticsService->handleCreditmemo($creditMemo));
     }
@@ -206,6 +196,7 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
      * Don't export if we would export too much
      */
     public function testCreditMemoRefundTooMuch() {
+        $this->orderRepositoryMock->expects($this->never())->method('save');
         $this->enableSettings(true,true,true);
         $creditMemo = $this->getMockedCreditMemo();
         $order = $this->getMockedOrderWithState(MagentoOrder::STATE_COMPLETE);
@@ -220,7 +211,7 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
         // we are refunding 50
         $creditMemo->expects($this->atLeastOnce())->method('getGrandTotal')->willReturn(100);
         $order->expects($this->never())->method('setAwAnalyticsAmount');
-        $creditMemo->expects($this->any())->method('getOrder')->willReturn($order);
+        $creditMemo->method('getOrder')->willReturn($order);
 
         $this->assertEquals(AnalyticsService::ERROR_CREDITMEMO_NEGATIVE_BALANCE, $this->analyticsService->handleCreditmemo($creditMemo));
     }
@@ -229,9 +220,12 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
      * Test with module disabled
      */
     public function testDisablingModule(){
+        $this->analyticsCallerMock->expects($this->never())->method('handleOrder');
+        $this->orderRepositoryMock->expects($this->never())->method('save');
         $this->enableSettings(false,true,true);
         $order = $this->getMockedOrderWithState(MagentoOrder::STATE_PROCESSING);
         $creditMemo = $this->getMockedCreditMemo();
+        $order->expects($this->never())->method('setAwAnalyticsExport');
 
         $this->assertEquals(AnalyticsService::ERROR_DISABLED, $this->analyticsService->handleOrder($order));
         $this->assertEquals(AnalyticsService::ERROR_DISABLED, $this->analyticsService->handleCreditmemo($creditMemo));
@@ -241,8 +235,13 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
      * Test if order hit is disabled
      */
     public function testDisablingOrderHit(){
+        $this->analyticsCallerMock->expects($this->never())->method('handleOrder');
         $this->enableSettings(true,false,true);
         $order = $this->getMockedOrderWithState(MagentoOrder::STATE_PROCESSING);
+
+        $this->orderRepositoryMock->expects($this->once())->method('save')->with($order);
+        $order->expects($this->once())->method('setAwAnalyticsExport')
+            ->with(AnalyticsService::EXPORT_STATUS_ORDER_HIT_DISABLED);
 
         $this->assertEquals(AnalyticsService::ERROR_DISABLED, $this->analyticsService->handleOrder($order));
     }
@@ -251,6 +250,8 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
      * Test if credit memo hit is disabled
      */
     public function testDisablingCreditMemo(){
+        $this->analyticsCallerMock->expects($this->never())->method('handleOrder');
+        $this->orderRepositoryMock->expects($this->never())->method('save');
         $this->enableSettings(true,true,false);
         $creditMemo = $this->getMockedCreditMemo();
 
@@ -261,26 +262,40 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
      * Test if we can handle creditMemo if order hits are disabled
      */
     public function testCreditMemoWithDisabledOrderHits() {
+        $this->analyticsCallerMock->expects($this->never())->method('handleOrder');
         $this->enableSettings(true, false, true);
         $order = $this->getMockedOrderWithState(MagentoOrder::STATE_PROCESSING);
 
         $order->expects($this->once())->method('getGrandTotal')->willReturn(100);
-        $order->expects($this->any())->method('setAwAnalyticsAmount')->withConsecutive([100], [0]);
-        $order->expects($this->any())->method('setAwAnalyticsExport')->withConsecutive([AnalyticsService::EXPORT_STATUS_ORDER_HIT_DISABLED], [AnalyticsService::EXPORT_STATUS_FULLY_REFUNDED]);
-        $order->expects($this->any())->method('save');
+        $amounts = [];
+        $states = [];
+        $order->expects($this->exactly(2))->method('setAwAnalyticsAmount')
+            ->willReturnCallback(static function ($amount) use (&$amounts) {
+                $amounts[] = $amount;
+            });
+        $order->expects($this->exactly(2))->method('setAwAnalyticsExport')
+            ->willReturnCallback(static function ($state) use (&$states) {
+                $states[] = $state;
+            });
+        $this->orderRepositoryMock->expects($this->exactly(2))->method('save')->with($order);
 
 
         $this->assertEquals(AnalyticsService::ERROR_DISABLED, $this->analyticsService->handleOrder($order));
 
-        $order->expects($this->any())->method('getAwAnalyticsAmount')->willReturn(100);
-        $order->expects($this->any())->method('getAwAnalyticsExport')->willReturn(AnalyticsService::EXPORT_STATUS_ORDER_HIT_DISABLED);
+        $order->method('getAwAnalyticsAmount')->willReturn(100);
+        $order->method('getAwAnalyticsExport')->willReturn(AnalyticsService::EXPORT_STATUS_ORDER_HIT_DISABLED);
 
         // Try creating a creditMemo
         $creditMemo = $this->getMockedCreditMemo();
-        $creditMemo->expects($this->any())->method('getOrder')->willReturn($order);
-        $creditMemo->expects($this->any())->method('getGrandTotal')->willReturn(100);
+        $creditMemo->method('getOrder')->willReturn($order);
+        $creditMemo->method('getGrandTotal')->willReturn(100);
 
         $this->assertEquals(AnalyticsService::SUCCESS, $this->analyticsService->handleCreditmemo($creditMemo));
+        $this->assertSame([100, 0.0], $amounts);
+        $this->assertSame([
+            AnalyticsService::EXPORT_STATUS_ORDER_HIT_DISABLED,
+            AnalyticsService::EXPORT_STATUS_FULLY_REFUNDED,
+        ], $states);
     }
 
     /**
@@ -290,12 +305,14 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
      * @return MagentoOrder
      */
     private function getMockedOrderWithState($state){
-        $order = $this->getMockBuilder(MagentoOrder::class)
+        $order = $this->getMockBuilder(AnalyticsOrder::class)
             ->disableOriginalConstructor()
-            ->addMethods(['getAwAnalyticsExport', 'setAwAnalyticsExport', 'getAwAnalyticsAmount', 'setAwAnalyticsAmount'])
-            ->onlyMethods(['getState','addCommentToStatusHistory', 'save', 'getGrandTotal'])
+            ->onlyMethods([
+                'getState', 'addCommentToStatusHistory', 'getGrandTotal', 'getStoreId', 'getIncrementId',
+                'getAwAnalyticsExport', 'setAwAnalyticsExport', 'getAwAnalyticsAmount', 'setAwAnalyticsAmount'
+            ])
             ->getMock();
-        $order->expects($this->any())->method('getState')->willReturn($state);
+        $order->method('getState')->willReturn($state);
         return $order;
     }
 
@@ -306,7 +323,9 @@ class AnalyticsServiceTest extends PHPUnit\Framework\TestCase
     private function getMockedCreditMemo() {
         $creditMemo = $this->getMockBuilder(Creditmemo::class)
             ->disableOriginalConstructor()
+            ->onlyMethods(['getStoreId', 'getOrder', 'getGrandTotal', 'getIncrementId'])
             ->getMock();
+        $creditMemo->expects($this->atLeastOnce())->method('getStoreId');
         return $creditMemo;
     }
 }

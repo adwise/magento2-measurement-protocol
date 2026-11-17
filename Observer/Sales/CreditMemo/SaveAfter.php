@@ -28,7 +28,7 @@ class SaveAfter implements ObserverInterface
 
     /**
      * @param Observer $observer
-     * @return $this
+     * @return void
      */
     public function execute(Observer $observer)
     {

@@ -79,4 +79,9 @@ class CreditMemoProductProvider implements CreditMemoProviderInterface
         $qty = $product->getQtyRefunded() ? $product->getQtyRefunded() : $product->getQty();
         return (int)$qty;
     }
+
+    private function round($number)
+    {
+        return round($number, 4, PHP_ROUND_HALF_EVEN);
+    }
 }

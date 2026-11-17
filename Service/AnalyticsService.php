@@ -3,6 +3,7 @@
 namespace Adwise\Analytics\Service;
 
 use Adwise\Analytics\Helper\Data as DataHelper;
+use Magento\Sales\Api\OrderRepositoryInterface;
 use Magento\Sales\Model\Order as MagentoOrder;
 use Magento\Sales\Model\Order\Creditmemo;
 use Psr\Log\LoggerInterface;
@@ -52,6 +53,9 @@ class AnalyticsService
 
     protected $analyticsCaller;
 
+    /** @var OrderRepositoryInterface */
+    protected $orderRepository;
+
     const ERROR_UNKNOWN_ORDER_STATE = -1;
     const ERROR_ORDER_OLD = -2;
     const ERROR_ORDER_ALREADY_EXPORTED = -3;
@@ -66,11 +70,13 @@ class AnalyticsService
     public function __construct (
         LoggerInterface $logger,
         DataHelper $dataHelper,
-        AnalyticsCaller $analyticsCaller
+        AnalyticsCaller $analyticsCaller,
+        OrderRepositoryInterface $orderRepository
     ) {
         $this->logger = $logger;
         $this->dataHelper = $dataHelper;
         $this->analyticsCaller = $analyticsCaller;
+        $this->orderRepository = $orderRepository;
     }
 
     public function handleOrder(MagentoOrder $order) {
@@ -80,7 +86,7 @@ class AnalyticsService
             // if the order hit is not enabled, still set the aw_exported_amount to order value to allow refunds
             $order->setAwAnalyticsAmount($order->getGrandTotal());
             $order->setAwAnalyticsExport(self::EXPORT_STATUS_ORDER_HIT_DISABLED);
-            $order->save();
+            $this->orderRepository->save($order);
             return self::ERROR_DISABLED;
         }
 
@@ -130,7 +136,7 @@ class AnalyticsService
         $order->setAwAnalyticsAmount($amountExported);
         $order->addCommentToStatusHistory('[AnalyticsService]: Sent order with amount ' . $amountExported);
         $this->logger->debug('[AnalyticsService] Exported ' . $order->getIncrementId() . ' with amount ' . $amountExported);
-        $order->save();
+        $this->orderRepository->save($order);
         return self::SUCCESS;
     }
 
@@ -155,7 +161,7 @@ class AnalyticsService
         $order->setAwAnalyticsAmount(0);
         $order->addCommentToStatusHistory('[AnalyticsService]: Sent cancellation');
         $this->logger->debug('[AnalyticsService] Exported cancellation for ' . $order->getIncrementId());
-        $order->save();
+        $this->orderRepository->save($order);
         return self::SUCCESS;
     }
 
@@ -199,7 +205,7 @@ class AnalyticsService
 
         $order->addCommentToStatusHistory('[AnalyticsService]: Sent credit memo with ' . $amountRefund . ' remaining ' . $afterRefund);
         $order->setAwAnalyticsAmount($afterRefund);
-        $order->save();
+        $this->orderRepository->save($order);
         return self::SUCCESS;
     }
 

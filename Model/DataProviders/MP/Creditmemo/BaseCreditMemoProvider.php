@@ -37,11 +37,11 @@ class BaseCreditMemoProvider implements CreditMemoProviderInterface
         }
 
         if ($order->getShippingAmount()) {
-            $data['shipping'] = $priceMod * $this->round($order->getShippingAmount());
+            $data['shipping'] = $this->round($order->getShippingAmount());
         }
 
         if ($order->getTaxAmount()) {
-            $data['tax'] = $priceMod * $this->round($order->getTaxAmount());
+            $data['tax'] = $this->round($order->getTaxAmount());
         }
 
         return $data;
